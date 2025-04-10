@@ -1,0 +1,92 @@
+qlib_init:
+  provider_uri: "~/.qlib/qlib_data/tw_data"
+  region: tw
+
+market: &market TW50
+benchmark: &benchmark "0050"
+
+data_handler_config: &data_handler_config
+  start_time: 2014-12-31
+  end_time: 2024-12-27
+  fit_start_time: 2014-12-31
+  fit_end_time: 2021-12-31
+  instruments: *market
+
+  learn_processors:
+    - class: DropnaLabel
+    - class: Fillna
+    - class: CSZScoreNorm
+    - class: ProcessInf
+
+  infer_processors:
+    - class: Fillna
+    - class: ZScoreNorm
+    - class: ProcessInf
+
+  label: ["Ref($close, -1)/$close - 1"]
+
+port_analysis_config: &port_analysis_config
+  strategy:
+    class: TopkDropoutStrategy
+    module_path: qlib.contrib.strategy
+    kwargs:
+      signal: <PRED>
+      topk: 10
+      n_drop: 2
+  backtest:
+    start_time: 2023-01-01
+    end_time: 2024-12-27
+    account: 100000000
+    benchmark: *benchmark
+    exchange_kwargs:
+      limit_threshold: 0.1
+      deal_price: close
+      open_cost: 0.001425
+      close_cost: 0.004425
+      min_cost: 20
+
+task:
+  model:
+    class: XGBModel
+    module_path: qlib.contrib.model.xgboost
+    kwargs:
+      eval_metric: rmse
+      learning_rate: 0.06424642669823001
+      max_depth: 5
+      subsample: 0.8466671252590435
+      colsample_bytree: 0.962838237653785
+      reg_alpha: 0.49091134749293946
+      reg_lambda: 0.4299807160698682
+
+  dataset:
+    class: DatasetH
+    module_path: qlib.data.dataset
+    kwargs:
+      handler:
+        class: Alpha158
+        module_path: qlib.contrib.data.handler
+        kwargs: *data_handler_config
+      segments:
+        train: ["2014-12-31", "2021-12-31"]
+        valid: ["2022-01-01", "2022-12-31"]
+        test: ["2023-01-01", "2024-12-27"]
+
+  record:
+    - class: SignalRecord
+      module_path: qlib.workflow.record_temp
+      kwargs:
+        model: <MODEL>
+        dataset: <DATASET>
+
+    - class: SigAnaRecord
+      module_path: qlib.workflow.record_temp
+      kwargs:
+        ana_long_short: False
+        ann_scaler: 252
+
+    - class: PortAnaRecord
+      module_path: qlib.workflow.record_temp
+      kwargs:
+        config: *port_analysis_config
+
+experiment_name: TRAIN_TW50_XGBoost_Alpha158
