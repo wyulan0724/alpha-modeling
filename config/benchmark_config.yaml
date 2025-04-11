@@ -1,0 +1,4 @@
+# config/benchmark_config.yaml
+configs:
+  - config/xgboost_Alpha158.yaml
+  - config/lightgbm_Alpha158.yaml
