@@ -9,5 +9,5 @@
 
 ## Prepare data:
 
-- The project expectss Taiwan stock market data in the `data/tw_data/` directory.
+- The project expects Taiwan stock market data in the `data/tw_data/` directory.
 - The data should include calendars, features, and instrument definitions.
