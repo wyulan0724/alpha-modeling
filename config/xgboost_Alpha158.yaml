@@ -1,5 +1,5 @@
 qlib_init:
-  provider_uri: "~/.qlib/qlib_data/tw_data"
+  provider_uri: "data/tw_data"
   region: tw
 
 market: &market TW50
@@ -13,15 +13,14 @@ data_handler_config: &data_handler_config
   instruments: *market
 
   learn_processors:
-    - class: DropnaLabel
-    - class: Fillna
     - class: CSZScoreNorm
-    - class: ProcessInf
+      kwargs:
+        fields_group: label
+    - class: DropnaLabel
 
   infer_processors:
-    - class: Fillna
     - class: ZScoreNorm
-    - class: ProcessInf
+    - class: Fillna
 
   label: ["Ref($close, -1)/$close - 1"]
 
