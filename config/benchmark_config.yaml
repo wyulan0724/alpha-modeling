@@ -1,19 +1,12 @@
 # config/benchmark_config.yaml
 configs:
   - config_path: "config/xgboost_Alpha158.yaml"
-    mode: "retrain"
-    # experiment_name: "Optional_Override_Experiment_Name" # Optional: Override the experiment name in config_path
-    factor_subset: "all"
-    data_range: null
-  - config_path: "config/xgboost_Alpha158.yaml"
-    mode: "predict"
     experiment_name: "TRAIN_TW50_XGBoost_Alpha158"
     recorder_id: "4526117c4d314d53828b3f379bf5899e" # Replace with actual recorder ID
     factor_subset: "all" # or ["Factor1", "Factor2"]
     data_range:
       predict: ["2024-06-01", "2024-12-27"]
   - config_path: "config/lightgbm_Alpha158.yaml"
-    mode: "predict"
     experiment_name: "TRAIN_TW50_LGBModel_Alpha158"
     recorder_id: "ef9d5d56d27b416a839f233134c8ce20" # Replace with actual recorder ID
     factor_subset: "all"

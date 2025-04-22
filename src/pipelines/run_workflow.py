@@ -214,98 +214,113 @@ def _run_prediction_and_analysis_with_records(
 # --- Main Workflow Function ---
 def run_workflow(
     config_path: str,
-    mode: str,
-    experiment_name: str,  # For 'retrain' or *source* for 'predict'
-    recorder_id: str = None,  # *Source* recorder ID for 'predict' mode
+    experiment_name: str,  # Source experiment name containing the trained model
+    recorder_id: str = None,  # Source recorder ID of the trained model
     factor_subset: list = None,
-    data_range: dict = None
+    data_range: dict = None,
+    task_config_override: dict = None
 ):
     """
-    Run a Qlib workflow based on the specified mode ('retrain' or 'predict').
+    Run a Qlib workflow in **Predict Mode ONLY**. Loads a pre-trained model
+    from the specified experiment and recorder ID, generates predictions on
+    the configured dataset (potentially using precomputed features),
+    and runs analysis records.
+
+    Args:
+        config_path (str): Path to the base YAML configuration file. Ignored if task_config_override is provided.
+        experiment_name (str): The name of the MLflow experiment where the *source* trained model is stored.
+        recorder_id (str): The recorder ID of the *source* trained model run within the experiment_name. This is REQUIRED.
+        factor_subset (list, optional): List of factors to use (overrides config). Defaults to None (use all).
+        data_range (dict, optional): Dictionary specifying data segments (overrides config). Defaults to None.
+        task_config_override (dict, optional): A dictionary representing the task config, directly provided.
+                                                If provided, config_path is ignored. Defaults to None.
+
+    Returns:
+        dict: A dictionary containing the results, status, metrics, and recorder ID of the *new* benchmark run.
     """
-    config_path_obj = Path(config_path)
-    if not config_path_obj.exists():
-        print(f"Error: Config file not found: {config_path}")
-        return {"config_path": config_path, "status": "error", "message": "Config file not found"}
+    # --- Check for required arguments for Predict Mode ---
+    if not recorder_id:
+        print("Error: Source Recorder ID (recorder_id) is required.")
+        return {
+            "config_path": config_path,
+            "experiment_name": experiment_name,
+            "recorder_id": None,
+            "source_recorder_id": recorder_id,
+            "factor_subset_used": factor_subset if factor_subset else "all",
+            "data_range_used": data_range if data_range else "from_config",
+            "status": "error",
+            "message": "Source Recorder ID (recorder_id) is required.",
+            "metrics": {}
+        }
 
-    # --- Load Base YAML Config ---
-    try:
-        with open(config_path_obj, "r", encoding="utf-8") as f:
-            base_config = yaml.safe_load(f)
-        if not isinstance(base_config, dict) or "task" not in base_config:
-            raise ValueError(
-                "Invalid config format or missing 'task' section.")
-    except Exception as e:
-        print(f"Error loading/parsing base config {config_path}: {e}")
-        return {"config_path": config_path, "status": "error", "message": f"Config loading error: {e}"}
+    # --- Load or use Task Config ---
+    if task_config_override:
+        print("Using provided task_config_override.")
+        base_config = task_config_override
+    else:
+        config_path_obj = Path(config_path)
+        if not config_path_obj.exists():
+            print(f"Error: Config file not found: {config_path}")
+            return {"config_path": config_path, "status": "error", "message": "Config file not found", "metrics": {}}
+        try:
+            with open(config_path_obj, "r", encoding="utf-8") as f:
+                base_config = yaml.safe_load(f)
+            if not isinstance(base_config, dict) or "task" not in base_config:
+                raise ValueError(
+                    "Invalid config format or missing 'task' section.")
+        except Exception as e:
+            print(f"Error loading/parsing base config {config_path}: {e}")
+            return {"config_path": config_path, "status": "error", "message": f"Config loading error: {e}", "metrics": {}}
 
-    # --- Prepare Task Config with Overrides ---
-    task_config = base_config.get("task", {})
+    # --- Prepare Task Config ---
+    task_config = base_config.get("task", {}).copy()
+
+    # --- Apply Benchmark Overrides ---
     task_config = _apply_benchmark_overrides(
         task_config, factor_subset, data_range)
 
-    # --- Execute based on Mode ---
+    # --- Execute Predict Mode Logic ---
     metrics = {}
-    final_recorder_id = None  # ID of the recorder containing the final results
+    final_recorder_id = None  # Benchmark run's recorder ID
     status = "success"
     message = ""
 
     try:
-        if mode == "retrain":
-            print(
-                f"Starting Retrain Mode for {config_path}, Experiment: {experiment_name}")
-            if "test" not in task_config.get("dataset", {}).get("kwargs", {}).get("segments", {}):
-                print(
-                    "Warning: 'test' segment not defined. Metrics might be incomplete.")
-
-            recorder = task_train(task_config, experiment_name=experiment_name)
-            final_recorder_id = recorder.id
-            # Save potentially modified config
-            recorder.save_objects(benchmark_run_config=task_config)
-            metrics = recorder.list_metrics()
-            print(
-                f"[Success] Retrain completed. Recorder ID: {final_recorder_id}")
-
-        elif mode == "predict":
-            print(
-                f"Starting Predict Mode for {config_path}, Source Experiment: {experiment_name}, Source Recorder: {recorder_id}")
-            if not recorder_id:
-                raise ValueError(
-                    "Source Recorder ID is required for 'predict' mode.")
-
-            # Determine prediction segment
-            predict_segment_name = "predict"
-            if data_range and predict_segment_name in data_range:
-                pass
-            elif "test" in task_config.get("dataset", {}).get("kwargs", {}).get("segments", {}):
-                predict_segment_name = "test"
-                print(
-                    f"Using '{predict_segment_name}' segment from config for prediction.")
-            else:
-                raise ValueError("Cannot determine prediction segment.")
-
-            # Define experiment name for the new benchmark recorder
-            benchmark_experiment_name = f"Benchmark_{experiment_name}"
-
-            # Call the helper function that uses Record Templates
-            metrics, final_recorder_id, status, message = _run_prediction_and_analysis_with_records(
-                task_config=task_config,  # Pass the potentially modified config
-                experiment_name=experiment_name,  # Source experiment
-                source_recorder_id=recorder_id,  # Source recorder
-                predict_segment=predict_segment_name,
-                benchmark_experiment_name=benchmark_experiment_name
-            )
-            # final_recorder_id now holds the ID of the *new* benchmark recorder
-            print(
-                f"[Finished] Prediction and Analysis completed. Status: {status}. Benchmark Recorder ID: {final_recorder_id}")
-
-        else:
+        print(
+            f"Starting Predict Mode for {config_path}, Source Experiment: {experiment_name}, Source Recorder: {recorder_id}")
+        if not recorder_id:
             raise ValueError(
-                f"Invalid mode: {mode}. Must be 'retrain' or 'predict'.")
+                "Source Recorder ID is required for 'predict' mode.")
+
+        # Determine prediction segment
+        predict_segment_name = "predict"
+        if data_range and predict_segment_name in data_range:
+            pass
+        elif "test" in task_config.get("dataset", {}).get("kwargs", {}).get("segments", {}):
+            predict_segment_name = "test"
+            print(
+                f"Using '{predict_segment_name}' segment from config for prediction.")
+        else:
+            raise ValueError("Cannot determine prediction segment.")
+
+        # Define experiment name for the new benchmark recorder
+        benchmark_experiment_name = f"Benchmark_{experiment_name}"
+
+        # Call the helper function that uses Record Templates
+        metrics, final_recorder_id, status, message = _run_prediction_and_analysis_with_records(
+            task_config=task_config,  # Pass the potentially modified config
+            experiment_name=experiment_name,  # Source experiment
+            source_recorder_id=recorder_id,  # Source recorder
+            predict_segment=predict_segment_name,
+            benchmark_experiment_name=benchmark_experiment_name
+        )
+        # final_recorder_id now holds the ID of the *new* benchmark recorder
+        print(
+            f"[Finished] Prediction and Analysis completed. Status: {status}. Benchmark Recorder ID: {final_recorder_id}")
 
     except Exception as e:
         print(
-            f"Critical Error during workflow execution (mode: {mode}, config: {config_path}): {e}")
+            f"Critical Error during workflow execution (Predict Mode, config: {config_path or 'provided config'}): {e}")
         traceback.print_exc()
         status = "error"
         message = f"Critical workflow error: {e}"
@@ -336,13 +351,9 @@ def run_workflow(
 
     result_dict = {
         "config_path": config_path,
-        # Keep original experiment name for reference
-        "experiment_name": experiment_name,
-        # ID of recorder with results (new one for predict)
-        "recorder_id": final_recorder_id,
-        # Add source ID for predict mode
-        "source_recorder_id": recorder_id if mode == 'predict' else None,
-        "mode": mode,
+        "experiment_name": experiment_name,  # Source experiment
+        "source_recorder_id": recorder_id,  # Source recorder ID used
+        "recorder_id": final_recorder_id,  # New benchmark recorder ID
         "factor_subset_used": factor_subset if factor_subset else "all",
         "data_range_used": data_range if data_range else "from_config",
         "status": status,

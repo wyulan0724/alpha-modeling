@@ -1,6 +1,7 @@
 qlib_init:
   provider_uri: "data/tw_data"
   region: tw
+  dataset_cache: "SimpleDatasetCache"
 
 market: &market TW50
 benchmark: &benchmark "0050"
