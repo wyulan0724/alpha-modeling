@@ -3,7 +3,7 @@ qlib_init:
   region: tw
   dataset_cache: "SimpleDatasetCache"
 
-market: &market TW50
+market: &market tw50
 benchmark: &benchmark "0050"
 
 data_handler_config: &data_handler_config
@@ -103,8 +103,4 @@ task:
       kwargs:
         config: *port_analysis_config
 
-experiment_name: TRAIN_TW50_TCN_Alpha158
-# --- Experiment Summary: TCN (non-ts) on DatasetH/Alpha158/TW50 ---
-# Performance: Low IC (~0.04), often negative monthly IC, poor group separation.
-# Training: Overfits easily; validation performance peaks very early (~epoch 2-10) despite parameter tuning (capacity/patience).
-# Verdict: Model architecture likely unsuitable for non-sequential tabular data. Recommend trying LightGBM or MLP instead.
+experiment_name: TRAIN_tw50_TCN_Alpha158
