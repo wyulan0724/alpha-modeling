@@ -4,3 +4,4 @@ langchain-core
 langgraph
 google-generativeai
 pydantic
+langgraph-supervisor
